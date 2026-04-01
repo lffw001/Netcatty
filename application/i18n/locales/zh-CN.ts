@@ -1323,6 +1323,8 @@ const zhCN: Messages = {
   'settings.terminal.localShell.shell.detected': '检测到',
   'settings.terminal.localShell.shell.notFound': '未找到 Shell 可执行文件',
   'settings.terminal.localShell.shell.isDirectory': '路径是目录，不是可执行文件',
+  'settings.terminal.localShell.shell.default': '系统默认',
+  'settings.terminal.localShell.shell.custom': '自定义...',
   'settings.terminal.localShell.startDir': '起始目录',
   'settings.terminal.localShell.startDir.desc': '打开本地终端时的起始目录。留空使用用户主目录。',
   'settings.terminal.localShell.startDir.placeholder': '用户主目录',

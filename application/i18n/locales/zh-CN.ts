@@ -563,6 +563,8 @@ const zhCN: Messages = {
   'qs.search.placeholder': '搜索主机或标签页',
   'qs.jumpTo': '跳转到',
   'qs.localTerminal': '本地终端',
+  'qs.localShells': '本地 Shell',
+  'qs.default': '默认',
 
   // Select Host panel
   'selectHost.title': '选择主机',

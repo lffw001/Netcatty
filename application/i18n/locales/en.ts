@@ -911,6 +911,8 @@ const en: Messages = {
   'qs.search.placeholder': 'Search hosts or tabs',
   'qs.jumpTo': 'Jump To',
   'qs.localTerminal': 'Local Terminal',
+  'qs.localShells': 'Local Shells',
+  'qs.default': 'Default',
 
   // Select Host panel
   'selectHost.title': 'Select Host',

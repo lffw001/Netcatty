@@ -67,7 +67,7 @@ interface QuickSwitcherProps {
   onSelect: (host: Host) => void;
   onSelectTab: (tabId: string) => void;
   onClose: () => void;
-  onCreateLocalTerminal?: (shell?: { command: string; args?: string[] }) => void;
+  onCreateLocalTerminal?: (shell?: { command: string; args?: string[]; name?: string; icon?: string }) => void;
   // onCreateWorkspace removed - feature not currently used
   keyBindings?: KeyBinding[];
 }
@@ -234,7 +234,7 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
       case "shell": {
         const shell = discoveredShells.find(s => s.id === item.id);
         if (shell && onCreateLocalTerminal) {
-          onCreateLocalTerminal({ command: shell.command, args: shell.args });
+          onCreateLocalTerminal({ command: shell.command, args: shell.args, name: shell.name, icon: shell.icon });
           onClose();
         }
         break;
@@ -418,7 +418,7 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
                       }`}
                       onClick={() => {
                         if (onCreateLocalTerminal) {
-                          onCreateLocalTerminal({ command: shell.command, args: shell.args });
+                          onCreateLocalTerminal({ command: shell.command, args: shell.args, name: shell.name, icon: shell.icon });
                           onClose();
                         }
                       }}

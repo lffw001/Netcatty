@@ -934,7 +934,7 @@ export default function SettingsTerminalTab(props: {
             >
               <option value="">
                 {t("settings.terminal.localShell.shell.default")}
-                {defaultShell ? ` (${defaultShell.split(/[\/\\]/).pop()})` : ""}
+                {defaultShell ? ` (${defaultShell.split(/[/\\]/).pop()})` : ""}
               </option>
               {discoveredShells.filter(s => !s.isDefault).map((shell) => (
                 <option key={shell.id} value={shell.id}>

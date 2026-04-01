@@ -815,6 +815,8 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
           charset: session.charset,
           localShell: session.localShell,
           localShellArgs: session.localShellArgs,
+          localShellName: session.localShellName,
+          localShellIcon: session.localShellIcon,
         });
       }
     }

@@ -129,6 +129,8 @@ export interface Host {
   // Per-session shell override for local terminals (from shell discovery)
   localShell?: string;
   localShellArgs?: string[];
+  localShellName?: string;
+  localShellIcon?: string;
 }
 
 export type KeyType = 'RSA' | 'ECDSA' | 'ED25519';
@@ -671,6 +673,8 @@ export interface TerminalSession {
   serialConfig?: SerialConfig;
   localShell?: string;       // Shell command for local terminals (from discovery)
   localShellArgs?: string[]; // Shell args for local terminals (from discovery)
+  localShellName?: string;   // Display name for local shell (e.g., "Zsh", "Ubuntu (WSL)")
+  localShellIcon?: string;   // Icon identifier for local shell (e.g., "zsh", "ubuntu")
 }
 
 export interface RemoteFile {

@@ -286,7 +286,49 @@ function detectPwsh() {
  * @returns {object[]} Array of DiscoveredShell objects (may be empty).
  */
 function detectWslDistros() {
+  const wslExe = path.join(
+    process.env.SystemRoot || "C:\\Windows",
+    "System32",
+    "wsl.exe",
+  );
+  if (!fs.existsSync(wslExe)) return [];
+
   const distros = [];
+
+  // Primary: use `wsl.exe -l -q` which lists installed distros one per line.
+  // More reliable than registry parsing across Windows versions.
+  // Note: wsl.exe outputs UTF-16LE on some builds, so we read as buffer and decode.
+  try {
+    const buf = execFileSync(wslExe, ["-l", "-q"], {
+      timeout: 5000,
+      windowsHide: true,
+      maxBuffer: 1024 * 64,
+    });
+    // Decode as UTF-16LE first (common), then try UTF-8 if it looks wrong
+    let output = buf.toString("utf16le");
+    if (output.includes("\ufffd") || output.length === 0) {
+      output = buf.toString("utf8");
+    }
+    const names = output
+      .split(/\r?\n/)
+      .map((l) => l.replace(/\0/g, "").trim())
+      .filter(Boolean);
+
+    for (const distroName of names) {
+      distros.push({
+        id: `wsl-${distroName.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
+        name: `${distroName} (WSL)`,
+        command: wslExe,
+        args: ["-d", distroName],
+        icon: mapWslDistroIcon(distroName),
+      });
+    }
+    if (distros.length > 0) return distros;
+  } catch (_err) {
+    // wsl.exe -l -q failed, fall through to registry method.
+  }
+
+  // Fallback: enumerate registry subkeys under Lxss
   try {
     const lxssKey = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss";
     const subkeys = regEnumSubkeys(lxssKey);
@@ -299,7 +341,7 @@ function detectWslDistros() {
         distros.push({
           id: `wsl-${distroName.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
           name: `${distroName} (WSL)`,
-          command: "wsl.exe",
+          command: wslExe,
           args: ["-d", distroName],
           icon: mapWslDistroIcon(distroName),
         });

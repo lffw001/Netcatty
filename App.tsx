@@ -1099,18 +1099,22 @@ function App({ settings }: { settings: SettingsState }) {
   }, []);
 
   // Wrapper to create local terminal with logging
-  const handleCreateLocalTerminal = useCallback((shell?: { command: string; args?: string[] }) => {
+  const handleCreateLocalTerminal = useCallback((shell?: { command: string; args?: string[]; name?: string; icon?: string }) => {
     const { username, hostname } = systemInfoRef.current;
     const resolved = shell ?? resolveShellSetting(terminalSettings.localShell, discoveredShells);
+    const shellName = shell?.name ?? (resolved ? discoveredShells.find(s => s.command === resolved.command)?.name : undefined);
+    const shellIcon = shell?.icon ?? (resolved ? discoveredShells.find(s => s.command === resolved.command)?.icon : undefined);
     const sessionId = createLocalTerminal({
       shellType: classifyLocalShellType(resolved?.command || terminalSettings.localShell, navigator.userAgent),
       shell: resolved?.command,
       shellArgs: resolved?.args,
+      shellName,
+      shellIcon,
     });
     addConnectionLog({
       sessionId,
       hostId: '',
-      hostLabel: 'Local Terminal',
+      hostLabel: shellName || 'Local Terminal',
       hostname: 'localhost',
       username: username,
       protocol: 'local',

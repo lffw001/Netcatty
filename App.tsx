@@ -36,6 +36,7 @@ import { KeyboardInteractiveModal, KeyboardInteractiveRequest } from './componen
 import { PassphraseModal, PassphraseRequest } from './components/PassphraseModal';
 import { cn } from './lib/utils';
 import { classifyLocalShellType } from './lib/localShell';
+import { useDiscoveredShells, resolveShellSetting } from './lib/useDiscoveredShells';
 import { ConnectionLog, Host, HostProtocol, SerialConfig, TerminalSession, TerminalTheme } from './types';
 import { LogView as LogViewType } from './application/state/useSessionState';
 import type { SftpView as SftpViewComponent } from './components/SftpView';
@@ -203,6 +204,8 @@ function App({ settings }: { settings: SettingsState }) {
     reapplyCurrentTheme,
     workspaceFocusStyle,
   } = settings;
+
+  const discoveredShells = useDiscoveredShells();
 
   // Sync workspace focus indicator style to DOM for CSS targeting
   useEffect(() => {
@@ -830,22 +833,27 @@ function App({ settings }: { settings: SettingsState }) {
   addConnectionLogRef.current = addConnectionLog;
 
   const createLocalTerminalWithCurrentShell = useCallback(() => {
+    const resolved = resolveShellSetting(terminalSettings.localShell, discoveredShells);
     return createLocalTerminal({
-      shellType: classifyLocalShellType(terminalSettings.localShell, navigator.userAgent),
+      shellType: classifyLocalShellType(resolved?.command || terminalSettings.localShell, navigator.userAgent),
+      shell: resolved?.command,
+      shellArgs: resolved?.args,
     });
-  }, [createLocalTerminal, terminalSettings.localShell]);
+  }, [createLocalTerminal, terminalSettings.localShell, discoveredShells]);
 
   const splitSessionWithCurrentShell = useCallback((sessionId: string, direction: 'horizontal' | 'vertical') => {
+    const resolved = resolveShellSetting(terminalSettings.localShell, discoveredShells);
     return splitSession(sessionId, direction, {
-      localShellType: classifyLocalShellType(terminalSettings.localShell, navigator.userAgent),
+      localShellType: classifyLocalShellType(resolved?.command || terminalSettings.localShell, navigator.userAgent),
     });
-  }, [splitSession, terminalSettings.localShell]);
+  }, [splitSession, terminalSettings.localShell, discoveredShells]);
 
   const copySessionWithCurrentShell = useCallback((sessionId: string) => {
+    const resolved = resolveShellSetting(terminalSettings.localShell, discoveredShells);
     return copySession(sessionId, {
-      localShellType: classifyLocalShellType(terminalSettings.localShell, navigator.userAgent),
+      localShellType: classifyLocalShellType(resolved?.command || terminalSettings.localShell, navigator.userAgent),
     });
-  }, [copySession, terminalSettings.localShell]);
+  }, [copySession, terminalSettings.localShell, discoveredShells]);
 
   const closeTabKeyStr = useMemo(() => {
     if (hotkeyScheme === 'disabled') return null;
@@ -1093,10 +1101,11 @@ function App({ settings }: { settings: SettingsState }) {
   // Wrapper to create local terminal with logging
   const handleCreateLocalTerminal = useCallback((shell?: { command: string; args?: string[] }) => {
     const { username, hostname } = systemInfoRef.current;
+    const resolved = shell ?? resolveShellSetting(terminalSettings.localShell, discoveredShells);
     const sessionId = createLocalTerminal({
-      shellType: classifyLocalShellType(shell?.command || terminalSettings.localShell, navigator.userAgent),
-      shell: shell?.command,
-      shellArgs: shell?.args,
+      shellType: classifyLocalShellType(resolved?.command || terminalSettings.localShell, navigator.userAgent),
+      shell: resolved?.command,
+      shellArgs: resolved?.args,
     });
     addConnectionLog({
       sessionId,
@@ -1110,7 +1119,7 @@ function App({ settings }: { settings: SettingsState }) {
       localHostname: hostname,
       saved: false,
     });
-  }, [addConnectionLog, createLocalTerminal, terminalSettings.localShell]);
+  }, [addConnectionLog, createLocalTerminal, terminalSettings.localShell, discoveredShells]);
 
   const resolveEffectiveHost = useCallback((host: Host): Host => {
     if (!host.group) return host;

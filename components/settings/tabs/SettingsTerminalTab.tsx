@@ -299,13 +299,13 @@ export default function SettingsTerminalTab(props: {
   const discoveredShells = useDiscoveredShells();
   const [showCustomShellInput, setShowCustomShellInput] = useState(() => {
     if (!terminalSettings.localShell) return false;
-    return !discoveredShells.some(s => s.command === terminalSettings.localShell);
+    return !discoveredShells.some(s => s.id === terminalSettings.localShell);
   });
 
   // Update showCustomShellInput once discovered shells load
   useEffect(() => {
     if (!terminalSettings.localShell) return;
-    setShowCustomShellInput(!discoveredShells.some(s => s.command === terminalSettings.localShell));
+    setShowCustomShellInput(!discoveredShells.some(s => s.id === terminalSettings.localShell));
   }, [discoveredShells]);
   const [themeModalOpen, setThemeModalOpen] = useState(false);
 
@@ -411,12 +411,18 @@ export default function SettingsTerminalTab(props: {
     }
   }, []);
 
-  // Validate shell path when it changes
+  // Validate shell path when it changes (only for custom paths, not discovered shell ids)
   useEffect(() => {
     const bridge = (window as unknown as { netcatty?: NetcattyBridge }).netcatty;
     const shellPath = terminalSettings.localShell;
 
     if (!shellPath) {
+      setShellValidation(null);
+      return;
+    }
+
+    // Skip validation for discovered shell ids — only validate custom paths
+    if (discoveredShells.some(s => s.id === shellPath)) {
       setShellValidation(null);
       return;
     }
@@ -441,7 +447,7 @@ export default function SettingsTerminalTab(props: {
     }, 300);
 
     return () => clearTimeout(timeoutId);
-  }, [terminalSettings.localShell, t]);
+  }, [terminalSettings.localShell, discoveredShells, t]);
 
   // Validate directory path when it changes
   useEffect(() => {
@@ -931,7 +937,7 @@ export default function SettingsTerminalTab(props: {
                 {defaultShell ? ` (${defaultShell.split(/[\/\\]/).pop()})` : ""}
               </option>
               {discoveredShells.filter(s => !s.isDefault).map((shell) => (
-                <option key={shell.id} value={shell.command}>
+                <option key={shell.id} value={shell.id}>
                   {shell.name}
                 </option>
               ))}

@@ -52,20 +52,20 @@ export function resolveShellSetting(
     return { command: shell.command, args: shell.args };
   }
 
-  // If discovery has loaded (non-empty list) and no ID matched,
-  // this is a custom value — pass it through as-is.
+  // Check if the value looks like a file path or bare executable name
+  const looksLikePath = /[/\\]/.test(localShell);
+  const looksLikeShellId = /-/.test(localShell) && !looksLikePath;
+
   if (discoveredShells.length > 0) {
-    return { command: localShell };
+    // Discovery loaded. If value looks like a path/executable, pass through as custom.
+    // If it looks like a shell ID (has hyphens, e.g. "wsl-ubuntu") but didn't match,
+    // it's stale/unavailable — return null to fall back to system default.
+    return looksLikeShellId ? null : { command: localShell };
   }
 
-  // Discovery hasn't loaded yet. If the value looks like a path or bare
-  // executable (no hyphens — shell IDs like "wsl-ubuntu" always have hyphens),
-  // pass through. Otherwise return null to use the system default.
-  if (/[/\\]/.test(localShell) || !/-/.test(localShell)) {
-    return { command: localShell };
-  }
-
-  return null;
+  // Discovery hasn't loaded yet. Pass through paths and bare names,
+  // but hold back shell-ID-like values until discovery completes.
+  return looksLikeShellId ? null : { command: localShell };
 }
 
 const DISTRO_ICONS = new Set([

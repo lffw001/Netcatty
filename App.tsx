@@ -834,10 +834,13 @@ function App({ settings }: { settings: SettingsState }) {
 
   const createLocalTerminalWithCurrentShell = useCallback(() => {
     const resolved = resolveShellSetting(terminalSettings.localShell, discoveredShells);
+    const matchedShell = discoveredShells.find(s => s.id === terminalSettings.localShell);
     return createLocalTerminal({
       shellType: classifyLocalShellType(resolved?.command || terminalSettings.localShell, navigator.userAgent),
       shell: resolved?.command,
       shellArgs: resolved?.args,
+      shellName: matchedShell?.name,
+      shellIcon: matchedShell?.icon,
     });
   }, [createLocalTerminal, terminalSettings.localShell, discoveredShells]);
 
@@ -1102,8 +1105,10 @@ function App({ settings }: { settings: SettingsState }) {
   const handleCreateLocalTerminal = useCallback((shell?: { command: string; args?: string[]; name?: string; icon?: string }) => {
     const { username, hostname } = systemInfoRef.current;
     const resolved = shell ?? resolveShellSetting(terminalSettings.localShell, discoveredShells);
-    const shellName = shell?.name ?? (resolved ? discoveredShells.find(s => s.command === resolved.command)?.name : undefined);
-    const shellIcon = shell?.icon ?? (resolved ? discoveredShells.find(s => s.command === resolved.command)?.icon : undefined);
+    // Match by ID (not command) to avoid WSL distros all sharing wsl.exe
+    const matchedShell = !shell ? discoveredShells.find(s => s.id === terminalSettings.localShell) : undefined;
+    const shellName = shell?.name ?? matchedShell?.name;
+    const shellIcon = shell?.icon ?? matchedShell?.icon;
     const sessionId = createLocalTerminal({
       shellType: classifyLocalShellType(resolved?.command || terminalSettings.localShell, navigator.userAgent),
       shell: resolved?.command,

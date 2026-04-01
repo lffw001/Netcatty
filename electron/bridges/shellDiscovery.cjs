@@ -304,11 +304,10 @@ function detectWslDistros() {
       windowsHide: true,
       maxBuffer: 1024 * 64,
     });
-    // Decode as UTF-16LE first (common), then try UTF-8 if it looks wrong
-    let output = buf.toString("utf16le");
-    if (output.includes("\ufffd") || output.length === 0) {
-      output = buf.toString("utf8");
-    }
+    // wsl.exe outputs UTF-16LE on most Windows builds (has NUL bytes between chars).
+    // Detect by checking for NUL bytes in the raw buffer; if present → UTF-16LE, else UTF-8.
+    const isUtf16 = buf.length >= 2 && buf.includes(0x00);
+    const output = buf.toString(isUtf16 ? "utf16le" : "utf8");
     const names = output
       .split(/\r?\n/)
       .map((l) => l.replace(/\0/g, "").trim())

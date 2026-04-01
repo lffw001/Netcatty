@@ -562,8 +562,11 @@ export const createXTermRuntime = (ctx: CreateXTermRuntimeContext): XTermRuntime
         }
       } else {
         // Character mode (default): send immediately
-        // Remap DEL (0x7F) → BS (0x08) when host requests Backspace-sends-^H
-        const outData = (ctx.host.backspaceSendsCtrlH && data === "\x7f") ? "\x08" : data;
+        // When backspaceBehavior is configured, remap the Backspace key output
+        let outData = data;
+        if (data === "\x7f" && ctx.host.backspaceBehavior === "ctrl-h") {
+          outData = "\x08";
+        }
         ctx.terminalBackend.writeToSession(id, outData);
 
         // Local echo for serial connections only when explicitly enabled

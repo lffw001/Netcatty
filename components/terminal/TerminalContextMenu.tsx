@@ -10,7 +10,7 @@ import {
   Terminal as TerminalIcon,
   Trash2,
 } from 'lucide-react';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import { KeyBinding, RightClickBehavior } from '../../domain/models';
 import {
@@ -75,55 +75,43 @@ export const TerminalContextMenu: React.FC<TerminalContextMenuProps> = ({
   const splitVShortcut = getShortcut('split-vertical');
   const clearShortcut = getShortcut('clear-buffer');
 
-  const showContextMenu = rightClickBehavior === 'context-menu' && !isAlternateScreen;
-
-  // Track whether Shift+Right-Click should force the context menu open
-  const [forceMenu, setForceMenu] = useState(false);
-
+  // Handle right-click: intercept for paste/select-word unless Shift is held
+  // or rightClickBehavior is 'context-menu'. The ContextMenuTrigger stays always
+  // enabled so Shift+Right-Click opens the menu on the first click.
   const handleRightClick = useCallback(
     (e: React.MouseEvent) => {
       // In alternate screen (tmux, vim, etc.), let the terminal application
       // handle right-click natively to avoid conflicting menus
-      if (isAlternateScreen) return;
-
-      // Shift+Right-Click always opens the context menu, regardless of rightClickBehavior
-      if (e.shiftKey) {
-        setForceMenu(true);
-        return; // Let the ContextMenuTrigger handle the event
+      if (isAlternateScreen) {
+        e.preventDefault();
+        return;
       }
 
+      // Shift+Right-Click or context-menu mode: let Radix open the menu
+      if (e.shiftKey || rightClickBehavior === 'context-menu') return;
+
+      // Paste / select-word: intercept and prevent the context menu
+      e.preventDefault();
       if (rightClickBehavior === 'paste') {
-        e.preventDefault();
-        e.stopPropagation();
         onPaste?.();
       } else if (rightClickBehavior === 'select-word') {
-        e.preventDefault();
-        e.stopPropagation();
         onSelectWord?.();
       }
     },
     [rightClickBehavior, onPaste, onSelectWord, isAlternateScreen],
   );
 
-  const menuEnabled = showContextMenu || forceMenu;
-
-  // Reset forceMenu when the menu closes
-  const handleOpenChange = useCallback((open: boolean) => {
-    if (!open) setForceMenu(false);
-  }, []);
-
   // Always use ContextMenu wrapper to maintain consistent React tree structure
   // This prevents terminal from unmounting when rightClickBehavior changes
   return (
-    <ContextMenu onOpenChange={handleOpenChange}>
+    <ContextMenu>
       <ContextMenuTrigger
         asChild
-        disabled={!menuEnabled}
-        onContextMenu={!menuEnabled ? handleRightClick : handleRightClick}
+        onContextMenu={handleRightClick}
       >
         {children}
       </ContextMenuTrigger>
-      {menuEnabled && (
+      {!isAlternateScreen && (
         <ContextMenuContent className="w-56">
           <ContextMenuItem onClick={onCopy} disabled={!hasSelection}>
             <Copy size={14} className="mr-2" />

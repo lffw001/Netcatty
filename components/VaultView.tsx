@@ -268,18 +268,18 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   const [newHostGroupPath, setNewHostGroupPath] = useState<string | null>(null);
 
   // Close host panel if the host being edited was deleted.
-  // Track which host IDs exist so we only close for actual deletions, not for
+  // Track previous host IDs so we only close for actual deletions, not for
   // unsaved new/duplicated hosts whose IDs were never in the hosts array.
   const knownHostIdsRef = useRef(new Set(hosts.map(h => h.id)));
   useEffect(() => {
-    knownHostIdsRef.current = new Set(hosts.map(h => h.id));
-  }, [hosts]);
-  useEffect(() => {
-    if (editingHost && knownHostIdsRef.current.has(editingHost.id) && !hosts.find(h => h.id === editingHost.id)) {
+    const currentIds = new Set(hosts.map(h => h.id));
+    // Check against previous IDs before updating the ref
+    if (editingHost && knownHostIdsRef.current.has(editingHost.id) && !currentIds.has(editingHost.id)) {
       setIsHostPanelOpen(false);
       setEditingHost(null);
       setNewHostGroupPath(null);
     }
+    knownHostIdsRef.current = currentIds;
   }, [hosts, editingHost]);
 
   // Group panel state

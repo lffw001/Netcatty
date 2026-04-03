@@ -974,8 +974,11 @@ function App({ settings }: { settings: SettingsState }) {
         const activeWs = workspaces.find(w => w.id === currentId);
         if (activeSession && !activeSession.workspaceId) {
           splitSessionWithCurrentShell(activeSession.id, 'horizontal');
-        } else if (activeWs?.focusedSessionId) {
-          splitSessionWithCurrentShell(activeWs.focusedSessionId, 'horizontal');
+        } else if (activeWs) {
+          // Use focused pane, or fall back to first live pane in the workspace tree
+          const targetId = activeWs.focusedSessionId
+            ?? collectSessionIds(activeWs.root)[0];
+          if (targetId) splitSessionWithCurrentShell(targetId, 'horizontal');
         }
         break;
       }
@@ -985,8 +988,10 @@ function App({ settings }: { settings: SettingsState }) {
         const activeWs = workspaces.find(w => w.id === currentId);
         if (activeSession && !activeSession.workspaceId) {
           splitSessionWithCurrentShell(activeSession.id, 'vertical');
-        } else if (activeWs?.focusedSessionId) {
-          splitSessionWithCurrentShell(activeWs.focusedSessionId, 'vertical');
+        } else if (activeWs) {
+          const targetId = activeWs.focusedSessionId
+            ?? collectSessionIds(activeWs.root)[0];
+          if (targetId) splitSessionWithCurrentShell(targetId, 'vertical');
         }
         break;
       }

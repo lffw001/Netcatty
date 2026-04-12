@@ -56,6 +56,8 @@ const SettingsTerminalTabContainer: React.FC<{ settings: SettingsState }> = ({ s
         <SettingsTerminalTab
             terminalThemeId={settings.terminalThemeId}
             setTerminalThemeId={settings.setTerminalThemeId}
+            followAppTerminalTheme={settings.followAppTerminalTheme}
+            setFollowAppTerminalTheme={settings.setFollowAppTerminalTheme}
             terminalFontFamilyId={settings.terminalFontFamilyId}
             setTerminalFontFamilyId={settings.setTerminalFontFamilyId}
             terminalFontSize={settings.terminalFontSize}
@@ -86,6 +88,8 @@ const SettingsAITabContainer: React.FC = () => {
                     setActiveModelId={aiState.setActiveModelId}
                     globalPermissionMode={aiState.globalPermissionMode}
                     setGlobalPermissionMode={aiState.setGlobalPermissionMode}
+                    toolIntegrationMode={aiState.toolIntegrationMode}
+                    setToolIntegrationMode={aiState.setToolIntegrationMode}
                     externalAgents={aiState.externalAgents}
                     setExternalAgents={aiState.setExternalAgents}
                     defaultAgentId={aiState.defaultAgentId}
@@ -282,6 +286,12 @@ const SettingsPageContent: React.FC<{ settings: SettingsState }> = ({ settings }
                             setUiLanguage={settings.setUiLanguage}
                             customCSS={settings.customCSS}
                             setCustomCSS={settings.setCustomCSS}
+                            showRecentHosts={settings.showRecentHosts}
+                            setShowRecentHosts={settings.setShowRecentHosts}
+                            showOnlyUngroupedHostsInRoot={settings.showOnlyUngroupedHostsInRoot}
+                            setShowOnlyUngroupedHostsInRoot={settings.setShowOnlyUngroupedHostsInRoot}
+                            showSftpTab={settings.showSftpTab}
+                            setShowSftpTab={settings.setShowSftpTab}
                         />
                     )}
 

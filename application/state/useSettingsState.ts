@@ -4,6 +4,7 @@ import {
   STORAGE_KEY_COLOR,
   STORAGE_KEY_SYNC,
   STORAGE_KEY_TERM_THEME,
+  STORAGE_KEY_TERM_FOLLOW_APP_THEME,
   STORAGE_KEY_THEME,
   STORAGE_KEY_TERM_FONT_FAMILY,
   STORAGE_KEY_TERM_FONT_SIZE,
@@ -33,10 +34,13 @@ import {
   STORAGE_KEY_GLOBAL_HOTKEY_ENABLED,
   STORAGE_KEY_AUTO_UPDATE_ENABLED,
   STORAGE_KEY_WORKSPACE_FOCUS_STYLE,
-
+  STORAGE_KEY_SHOW_RECENT_HOSTS,
+  STORAGE_KEY_SHOW_ONLY_UNGROUPED_HOSTS_IN_ROOT,
+  STORAGE_KEY_SHOW_SFTP_TAB,
 } from '../../infrastructure/config/storageKeys';
 import { DEFAULT_UI_LOCALE, resolveSupportedLocale } from '../../infrastructure/config/i18n';
 import { TERMINAL_THEMES } from '../../infrastructure/config/terminalThemes';
+import { getTerminalThemeForUiTheme } from '../../domain/terminalAppearance';
 import { customThemeStore, useCustomThemes } from '../state/customThemeStore';
 import { DEFAULT_FONT_SIZE } from '../../infrastructure/config/fonts';
 import { DARK_UI_THEMES, LIGHT_UI_THEMES, UiThemeTokens, getUiThemeById } from '../../infrastructure/config/uiThemes';
@@ -69,6 +73,9 @@ const DEFAULT_SFTP_SHOW_HIDDEN_FILES = false;
 const DEFAULT_SFTP_USE_COMPRESSED_UPLOAD = true;
 const DEFAULT_SFTP_AUTO_OPEN_SIDEBAR = false;
 const DEFAULT_SFTP_DEFAULT_VIEW_MODE: 'list' | 'tree' = 'list';
+const DEFAULT_SHOW_RECENT_HOSTS = true;
+const DEFAULT_SHOW_ONLY_UNGROUPED_HOSTS_IN_ROOT = false;
+const DEFAULT_SHOW_SFTP_TAB = true;
 
 // Editor defaults
 const DEFAULT_EDITOR_WORD_WRAP = false;
@@ -195,6 +202,17 @@ export const useSettingsState = () => {
   });
   const [syncConfig, setSyncConfig] = useState<SyncConfig | null>(() => localStorageAdapter.read<SyncConfig>(STORAGE_KEY_SYNC));
   const [terminalThemeId, setTerminalThemeId] = useState<string>(() => localStorageAdapter.readString(STORAGE_KEY_TERM_THEME) || DEFAULT_TERMINAL_THEME);
+  const [followAppTerminalTheme, setFollowAppTerminalThemeState] = useState<boolean>(() => {
+    const stored = localStorageAdapter.readString(STORAGE_KEY_TERM_FOLLOW_APP_THEME);
+    if (stored !== null) return stored === 'true';
+    // First time seeing this key. For genuinely fresh installs (no existing
+    // terminal theme in storage) default ON so the terminal matches the app
+    // theme out of the box. For upgrades from an older version (existing
+    // terminal theme present) default OFF to avoid silently overriding the
+    // user's manual choice.
+    const isUpgrade = !!localStorageAdapter.readString(STORAGE_KEY_TERM_THEME);
+    return !isUpgrade;
+  });
   const [terminalFontFamilyId, setTerminalFontFamilyId] = useState<string>(() => localStorageAdapter.readString(STORAGE_KEY_TERM_FONT_FAMILY) || DEFAULT_FONT_FAMILY);
   const [terminalFontSize, setTerminalFontSize] = useState<number>(() => localStorageAdapter.readNumber(STORAGE_KEY_TERM_FONT_SIZE) || DEFAULT_FONT_SIZE);
   const [uiLanguage, setUiLanguage] = useState<UILanguage>(() => {
@@ -246,6 +264,18 @@ export const useSettingsState = () => {
   const [sftpDefaultViewMode, setSftpDefaultViewMode] = useState<'list' | 'tree'>(() => {
     const stored = readStoredString(STORAGE_KEY_SFTP_DEFAULT_VIEW_MODE);
     return (stored === 'list' || stored === 'tree') ? stored : DEFAULT_SFTP_DEFAULT_VIEW_MODE;
+  });
+  const [showRecentHosts, setShowRecentHostsState] = useState<boolean>(() => {
+    const stored = localStorageAdapter.readBoolean(STORAGE_KEY_SHOW_RECENT_HOSTS);
+    return stored ?? DEFAULT_SHOW_RECENT_HOSTS;
+  });
+  const [showOnlyUngroupedHostsInRoot, setShowOnlyUngroupedHostsInRootState] = useState<boolean>(() => {
+    const stored = localStorageAdapter.readBoolean(STORAGE_KEY_SHOW_ONLY_UNGROUPED_HOSTS_IN_ROOT);
+    return stored ?? DEFAULT_SHOW_ONLY_UNGROUPED_HOSTS_IN_ROOT;
+  });
+  const [showSftpTab, setShowSftpTabState] = useState<boolean>(() => {
+    const stored = localStorageAdapter.readBoolean(STORAGE_KEY_SHOW_SFTP_TAB);
+    return stored ?? DEFAULT_SHOW_SFTP_TAB;
   });
   const [sftpTransferConcurrency, setSftpTransferConcurrencyState] = useState<number>(() => {
     const stored = localStorageAdapter.readNumber(STORAGE_KEY_SFTP_TRANSFER_CONCURRENCY);
@@ -450,6 +480,12 @@ export const useSettingsState = () => {
     if (storedAutoOpenSidebar === 'true' || storedAutoOpenSidebar === 'false') setSftpAutoOpenSidebar(storedAutoOpenSidebar === 'true');
     const storedDefaultViewMode = readStoredString(STORAGE_KEY_SFTP_DEFAULT_VIEW_MODE);
     if (storedDefaultViewMode === 'list' || storedDefaultViewMode === 'tree') setSftpDefaultViewMode(storedDefaultViewMode);
+    const storedShowRecentHosts = localStorageAdapter.readBoolean(STORAGE_KEY_SHOW_RECENT_HOSTS);
+    setShowRecentHostsState(storedShowRecentHosts ?? DEFAULT_SHOW_RECENT_HOSTS);
+    const storedShowOnlyUngroupedHostsInRoot = localStorageAdapter.readBoolean(STORAGE_KEY_SHOW_ONLY_UNGROUPED_HOSTS_IN_ROOT);
+    setShowOnlyUngroupedHostsInRootState(storedShowOnlyUngroupedHostsInRoot ?? DEFAULT_SHOW_ONLY_UNGROUPED_HOSTS_IN_ROOT);
+    const storedShowSftpTab = localStorageAdapter.readBoolean(STORAGE_KEY_SHOW_SFTP_TAB);
+    setShowSftpTabState(storedShowSftpTab ?? DEFAULT_SHOW_SFTP_TAB);
 
     // Workspace focus style
     const storedFocusStyle = readStoredString(STORAGE_KEY_WORKSPACE_FOCUS_STYLE);
@@ -538,6 +574,10 @@ export const useSettingsState = () => {
       }
       if (key === STORAGE_KEY_TERM_THEME && typeof value === 'string') {
         setTerminalThemeId(value);
+      }
+      if (key === STORAGE_KEY_TERM_FOLLOW_APP_THEME) {
+        const next = value === true || value === 'true';
+        setFollowAppTerminalThemeState((prev) => (prev === next ? prev : next));
       }
       if (key === STORAGE_KEY_TERM_FONT_FAMILY && typeof value === 'string') {
         setTerminalFontFamilyId(value);
@@ -642,18 +682,20 @@ export const useSettingsState = () => {
   const settingsSnapshotRef = useRef({
     theme, lightUiThemeId, darkUiThemeId, accentMode, customAccent,
     customCSS, uiFontFamilyId, hotkeyScheme, uiLanguage,
-    terminalThemeId, terminalFontFamilyId, terminalFontSize,
+    terminalThemeId, followAppTerminalTheme, terminalFontFamilyId, terminalFontSize,
     sftpDoubleClickBehavior, sftpAutoSync, sftpShowHiddenFiles,
     sftpUseCompressedUpload, sftpAutoOpenSidebar, sftpDefaultViewMode,
+    showRecentHosts, showOnlyUngroupedHostsInRoot, showSftpTab,
     editorWordWrap, sessionLogsEnabled, sessionLogsDir, sessionLogsFormat,
     globalHotkeyEnabled, autoUpdateEnabled,
   });
   settingsSnapshotRef.current = {
     theme, lightUiThemeId, darkUiThemeId, accentMode, customAccent,
     customCSS, uiFontFamilyId, hotkeyScheme, uiLanguage,
-    terminalThemeId, terminalFontFamilyId, terminalFontSize,
+    terminalThemeId, followAppTerminalTheme, terminalFontFamilyId, terminalFontSize,
     sftpDoubleClickBehavior, sftpAutoSync, sftpShowHiddenFiles,
     sftpUseCompressedUpload, sftpAutoOpenSidebar, sftpDefaultViewMode,
+    showRecentHosts, showOnlyUngroupedHostsInRoot, showSftpTab,
     editorWordWrap, sessionLogsEnabled, sessionLogsDir, sessionLogsFormat,
     globalHotkeyEnabled, autoUpdateEnabled,
   };
@@ -730,6 +772,13 @@ export const useSettingsState = () => {
       if (e.key === STORAGE_KEY_TERM_THEME && e.newValue) {
         if (e.newValue !== s.terminalThemeId) {
           setTerminalThemeId(e.newValue);
+        }
+      }
+      // Sync follow-app-theme toggle from other windows
+      if (e.key === STORAGE_KEY_TERM_FOLLOW_APP_THEME && e.newValue) {
+        const next = e.newValue === 'true';
+        if (next !== s.followAppTerminalTheme) {
+          setFollowAppTerminalThemeState(next);
         }
       }
       // Sync terminal font family from other windows
@@ -810,6 +859,24 @@ export const useSettingsState = () => {
           setSftpDefaultViewMode(e.newValue);
         }
       }
+      if (e.key === STORAGE_KEY_SHOW_RECENT_HOSTS && e.newValue !== null) {
+        const newValue = e.newValue === 'true';
+        if (newValue !== s.showRecentHosts) {
+          setShowRecentHostsState(newValue);
+        }
+      }
+      if (e.key === STORAGE_KEY_SHOW_ONLY_UNGROUPED_HOSTS_IN_ROOT && e.newValue !== null) {
+        const newValue = e.newValue === 'true';
+        if (newValue !== s.showOnlyUngroupedHostsInRoot) {
+          setShowOnlyUngroupedHostsInRootState(newValue);
+        }
+      }
+      if (e.key === STORAGE_KEY_SHOW_SFTP_TAB && e.newValue !== null) {
+        const newValue = e.newValue === 'true';
+        if (newValue !== s.showSftpTab) {
+          setShowSftpTabState(newValue);
+        }
+      }
       // Sync global hotkey enabled setting from other windows
       if (e.key === STORAGE_KEY_GLOBAL_HOTKEY_ENABLED && e.newValue !== null) {
         const newValue = e.newValue === 'true';
@@ -848,6 +915,12 @@ export const useSettingsState = () => {
     if (!persistMountedRef.current) return;
     notifySettingsChanged(STORAGE_KEY_TERM_THEME, terminalThemeId);
   }, [terminalThemeId, notifySettingsChanged]);
+
+  useEffect(() => {
+    localStorageAdapter.writeString(STORAGE_KEY_TERM_FOLLOW_APP_THEME, String(followAppTerminalTheme));
+    if (!persistMountedRef.current) return;
+    notifySettingsChanged(STORAGE_KEY_TERM_FOLLOW_APP_THEME, String(followAppTerminalTheme));
+  }, [followAppTerminalTheme, notifySettingsChanged]);
 
   useEffect(() => {
     localStorageAdapter.writeString(STORAGE_KEY_TERM_FONT_FAMILY, terminalFontFamilyId);
@@ -891,6 +964,27 @@ export const useSettingsState = () => {
   const setIsHotkeyRecording = useCallback((isRecording: boolean) => {
     setIsHotkeyRecordingState(isRecording);
     notifySettingsChanged(STORAGE_KEY_HOTKEY_RECORDING, isRecording);
+  }, [notifySettingsChanged]);
+
+  const setShowRecentHosts = useCallback((enabled: boolean) => {
+    setShowRecentHostsState(enabled);
+    localStorageAdapter.writeBoolean(STORAGE_KEY_SHOW_RECENT_HOSTS, enabled);
+    if (!persistMountedRef.current) return;
+    notifySettingsChanged(STORAGE_KEY_SHOW_RECENT_HOSTS, enabled);
+  }, [notifySettingsChanged]);
+
+  const setShowOnlyUngroupedHostsInRoot = useCallback((enabled: boolean) => {
+    setShowOnlyUngroupedHostsInRootState(enabled);
+    localStorageAdapter.writeBoolean(STORAGE_KEY_SHOW_ONLY_UNGROUPED_HOSTS_IN_ROOT, enabled);
+    if (!persistMountedRef.current) return;
+    notifySettingsChanged(STORAGE_KEY_SHOW_ONLY_UNGROUPED_HOSTS_IN_ROOT, enabled);
+  }, [notifySettingsChanged]);
+
+  const setShowSftpTab = useCallback((enabled: boolean) => {
+    setShowSftpTabState(enabled);
+    localStorageAdapter.writeBoolean(STORAGE_KEY_SHOW_SFTP_TAB, enabled);
+    if (!persistMountedRef.current) return;
+    notifySettingsChanged(STORAGE_KEY_SHOW_SFTP_TAB, enabled);
   }, [notifySettingsChanged]);
 
   // Apply and persist custom CSS
@@ -1116,12 +1210,21 @@ export const useSettingsState = () => {
   // Subscribe to custom theme changes so editing in-place triggers re-render
   const customThemes = useCustomThemes();
 
-  const currentTerminalTheme = useMemo(
-    () => TERMINAL_THEMES.find(t => t.id === terminalThemeId)
+  const currentTerminalTheme = useMemo(() => {
+    // When "Follow Application Theme" is enabled, pick the terminal theme
+    // whose background matches the active UI theme preset.
+    if (followAppTerminalTheme) {
+      const activeUiThemeId = resolvedTheme === 'dark' ? darkUiThemeId : lightUiThemeId;
+      const mapped = getTerminalThemeForUiTheme(activeUiThemeId);
+      if (mapped) {
+        const found = TERMINAL_THEMES.find(t => t.id === mapped);
+        if (found) return found;
+      }
+    }
+    return TERMINAL_THEMES.find(t => t.id === terminalThemeId)
       || customThemes.find(t => t.id === terminalThemeId)
-      || TERMINAL_THEMES[0],
-    [terminalThemeId, customThemes]
-  );
+      || TERMINAL_THEMES[0];
+  }, [terminalThemeId, customThemes, followAppTerminalTheme, resolvedTheme, lightUiThemeId, darkUiThemeId]);
 
   const updateTerminalSetting = useCallback(<K extends keyof TerminalSettings>(
     key: K,
@@ -1156,6 +1259,8 @@ export const useSettingsState = () => {
     setUiLanguage,
     terminalThemeId,
     setTerminalThemeId,
+    followAppTerminalTheme,
+    setFollowAppTerminalTheme: setFollowAppTerminalThemeState,
     currentTerminalTheme,
     terminalFontFamilyId,
     setTerminalFontFamilyId,
@@ -1187,6 +1292,12 @@ export const useSettingsState = () => {
     setSftpAutoOpenSidebar,
     sftpDefaultViewMode,
     setSftpDefaultViewMode,
+    showRecentHosts,
+    setShowRecentHosts,
+    showOnlyUngroupedHostsInRoot,
+    setShowOnlyUngroupedHostsInRoot,
+    showSftpTab,
+    setShowSftpTab,
     sftpTransferConcurrency,
     setSftpTransferConcurrency,
     // Editor Settings
@@ -1225,6 +1336,7 @@ export const useSettingsState = () => {
       terminalThemeId, terminalFontFamilyId, terminalFontSize, terminalSettings,
       customKeyBindings, editorWordWrap,
       sftpDoubleClickBehavior, sftpAutoSync, sftpShowHiddenFiles, sftpUseCompressedUpload, sftpAutoOpenSidebar, sftpDefaultViewMode,
+      showRecentHosts, showOnlyUngroupedHostsInRoot, showSftpTab,
       customThemes, workspaceFocusStyle,
     ]),
   };

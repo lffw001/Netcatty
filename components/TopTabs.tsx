@@ -21,6 +21,7 @@ const dragRegionNoSelect = { WebkitAppRegion: 'drag', userSelect: 'none' } as Re
 
 interface TopTabsProps {
   theme: 'dark' | 'light';
+  followAppTerminalTheme?: boolean;
   hosts: Host[];
   sessions: TerminalSession[];
   orphanSessions: TerminalSession[];
@@ -43,6 +44,7 @@ interface TopTabsProps {
   onStartSessionDrag: (sessionId: string) => void;
   onEndSessionDrag: () => void;
   onReorderTabs: (draggedId: string, targetId: string, position: 'before' | 'after') => void;
+  showSftpTab: boolean;
 }
 
 // Detect local OS for local terminal tab icons
@@ -227,6 +229,7 @@ WindowControls.displayName = 'WindowControls';
 
 const TopTabsInner: React.FC<TopTabsProps> = ({
   theme,
+  followAppTerminalTheme = false,
   hosts,
   sessions,
   orphanSessions,
@@ -249,6 +252,7 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
   onStartSessionDrag,
   onEndSessionDrag,
   onReorderTabs,
+  showSftpTab,
 }) => {
   const { t } = useI18n();
   // Subscribe to activeTabId from external store
@@ -765,6 +769,7 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
   return (
     <div
       data-top-tabs-root
+      data-section="top-tabs"
       className="relative w-full bg-secondary app-drag"
       style={{
         ...dragRegionNoSelect,
@@ -809,40 +814,42 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
           >
             <FolderLock size={14} /> Vaults
           </div>
-          <div
-            onClick={() => onSelectTab('sftp')}
-            className={cn(
-              "relative h-7 px-3 rounded-none text-xs font-semibold cursor-pointer flex items-center gap-2 app-no-drag",
-            )}
-            style={{
-              backgroundColor: isSftpActive
-                ? 'var(--top-tabs-active-bg, hsl(var(--background)))'
-                : 'transparent',
-              color: isSftpActive
-                ? 'var(--top-tabs-fg, hsl(var(--foreground)))'
-                : 'var(--top-tabs-muted, hsl(var(--muted-foreground)))',
-            }}
-            onMouseEnter={(e) => {
-              if (!isSftpActive) {
-                e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--top-tabs-active-bg, hsl(var(--background))) 40%, transparent)';
-                e.currentTarget.style.color = 'var(--top-tabs-fg, hsl(var(--foreground)))';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isSftpActive) {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = 'var(--top-tabs-muted, hsl(var(--muted-foreground)))';
-              }
-            }}
-          >
-            {isSftpActive && (
-              <div
-                className="absolute top-0 left-0 right-0 h-[2px]"
-                style={{ backgroundColor: 'var(--top-tabs-accent, hsl(var(--accent)))' }}
-              />
-            )}
-            <Folder size={14} /> SFTP
-          </div>
+          {showSftpTab && (
+            <div
+              onClick={() => onSelectTab('sftp')}
+              className={cn(
+                "relative h-7 px-3 rounded-none text-xs font-semibold cursor-pointer flex items-center gap-2 app-no-drag",
+              )}
+              style={{
+                backgroundColor: isSftpActive
+                  ? 'var(--top-tabs-active-bg, hsl(var(--background)))'
+                  : 'transparent',
+                color: isSftpActive
+                  ? 'var(--top-tabs-fg, hsl(var(--foreground)))'
+                  : 'var(--top-tabs-muted, hsl(var(--muted-foreground)))',
+              }}
+              onMouseEnter={(e) => {
+                if (!isSftpActive) {
+                  e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--top-tabs-active-bg, hsl(var(--background))) 40%, transparent)';
+                  e.currentTarget.style.color = 'var(--top-tabs-fg, hsl(var(--foreground)))';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isSftpActive) {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = 'var(--top-tabs-muted, hsl(var(--muted-foreground)))';
+                }
+              }}
+            >
+              {isSftpActive && (
+                <div
+                  className="absolute top-0 left-0 right-0 h-[2px]"
+                  style={{ backgroundColor: 'var(--top-tabs-accent, hsl(var(--accent)))' }}
+                />
+              )}
+              <Folder size={14} /> SFTP
+            </div>
+          )}
         </div>
 
         {/* Scrollable tabs container with fade masks */}
@@ -935,7 +942,7 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
             className="h-6 w-6 app-no-drag"
             style={{ color: 'var(--top-tabs-muted, hsl(var(--muted-foreground)))' }}
             onClick={onToggleTheme}
-            disabled={isImmersiveActive}
+            disabled={isImmersiveActive && !followAppTerminalTheme}
             title="Toggle theme"
           >
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
@@ -964,7 +971,10 @@ const topTabsAreEqual = (prev: TopTabsProps, next: TopTabsProps): boolean => {
     prev.isMacClient === next.isMacClient &&
     prev.onOpenSettings === next.onOpenSettings &&
     prev.onSyncNow === next.onSyncNow &&
-    prev.isImmersiveActive === next.isImmersiveActive
+    prev.onToggleTheme === next.onToggleTheme &&
+    prev.followAppTerminalTheme === next.followAppTerminalTheme &&
+    prev.isImmersiveActive === next.isImmersiveActive &&
+    prev.showSftpTab === next.showSftpTab
   );
 };
 

@@ -182,7 +182,11 @@ export const createXTermRuntime = (ctx: CreateXTermRuntimeContext): XTermRuntime
 
   const cursorStyle = settings?.cursorShape ?? "block";
   const cursorBlink = settings?.cursorBlink ?? true;
-  const scrollback = settings?.scrollback ?? 10000;
+  // xterm.js treats scrollback=0 as "no scrollback buffer", which breaks mouse
+  // wheel scrolling (events become arrow-key sequences).  The UI uses 0 to mean
+  // "no limit", so map it to a large value instead.
+  const rawScrollback = settings?.scrollback ?? 10000;
+  const scrollback = rawScrollback === 0 ? 999999 : rawScrollback;
   const drawBoldTextInBrightColors = settings?.drawBoldInBrightColors ?? true;
   const fontWeight = resolveHostTerminalFontWeight(ctx.host, settings?.fontWeight ?? 400);
   const fontWeightBold = settings?.fontWeightBold ?? 700;
@@ -419,12 +423,6 @@ export const createXTermRuntime = (ctx: CreateXTermRuntimeContext): XTermRuntime
     if (ctx.onAutocompleteKeyEvent) {
       const consumed = ctx.onAutocompleteKeyEvent(e);
       if (!consumed) return false; // Event was consumed by autocomplete
-    }
-
-    if ((e.ctrlKey || e.metaKey) && e.key === "f" && e.type === "keydown") {
-      e.preventDefault();
-      ctx.setIsSearchOpen(true);
-      return false;
     }
 
     const currentScheme = ctx.hotkeySchemeRef.current;

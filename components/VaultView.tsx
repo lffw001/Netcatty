@@ -39,7 +39,11 @@ import { resolveGroupDefaults, applyGroupDefaults } from "../domain/groupConfig"
 import { getEffectiveHostDistro, sanitizeHost } from "../domain/host";
 import { importVaultHostsFromText, exportHostsToCsvWithStats } from "../domain/vaultImport";
 import type { VaultImportFormat } from "../domain/vaultImport";
-import { STORAGE_KEY_VAULT_HOSTS_VIEW_MODE, STORAGE_KEY_VAULT_HOSTS_TREE_EXPANDED, STORAGE_KEY_VAULT_SIDEBAR_COLLAPSED, STORAGE_KEY_SHOW_RECENT_HOSTS } from "../infrastructure/config/storageKeys";
+import {
+  STORAGE_KEY_VAULT_HOSTS_TREE_EXPANDED,
+  STORAGE_KEY_VAULT_HOSTS_VIEW_MODE,
+  STORAGE_KEY_VAULT_SIDEBAR_COLLAPSED,
+} from "../infrastructure/config/storageKeys";
 import { cn } from "../lib/utils";
 import { useInstantThemeSwitch } from "../lib/useInstantThemeSwitch";
 import {
@@ -147,6 +151,8 @@ interface VaultViewProps {
   onRunSnippet?: (snippet: Snippet, targetHosts: Host[]) => void;
   groupConfigs: GroupConfig[];
   onUpdateGroupConfigs: (configs: GroupConfig[]) => void;
+  showRecentHosts: boolean;
+  showOnlyUngroupedHostsInRoot: boolean;
   // Optional: navigate to a specific section on mount or when changed
   navigateToSection?: VaultSection | null;
   onNavigateToSectionHandled?: () => void;
@@ -193,6 +199,8 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   onRunSnippet,
   groupConfigs,
   onUpdateGroupConfigs,
+  showRecentHosts,
+  showOnlyUngroupedHostsInRoot,
   navigateToSection,
   onNavigateToSectionHandled,
 }) => {
@@ -229,11 +237,6 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   const [dragOverDropTarget, setDragOverDropTarget] = useState<DropTarget | null>(null);
   const [confirmedDropTarget, setConfirmedDropTarget] = useState<DropTarget | null>(null);
   const dropTargetPulseTimeoutRef = useRef<number | null>(null);
-
-  const [showRecentHosts, _setShowRecentHosts] = useStoredBoolean(
-    STORAGE_KEY_SHOW_RECENT_HOSTS,
-    true,
-  );
 
   // Handle external navigation requests
   useEffect(() => {
@@ -292,7 +295,6 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
     if (!group) return undefined;
     return resolveGroupDefaults(group, groupConfigs);
   }, [editingHost, newHostGroupPath, selectedGroupPath, groupConfigs]);
-
   // Quick connect state
   const [quickConnectTarget, setQuickConnectTarget] = useState<{
     hostname: string;
@@ -875,6 +877,11 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
         }
         return hostGroup === selectedGroupPath;
       });
+    } else if (showOnlyUngroupedHostsInRoot) {
+      filtered = filtered.filter((h) => {
+        const hostGroup = (h.group || "").trim();
+        return hostGroup === "";
+      });
     }
     if (search.trim()) {
       const s = search.toLowerCase();
@@ -912,7 +919,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
       }
     });
     return filtered;
-  }, [hosts, selectedGroupPath, search, selectedTags, sortMode]);
+  }, [hosts, selectedGroupPath, showOnlyUngroupedHostsInRoot, search, selectedTags, sortMode]);
 
   // Pinned hosts for root-level display (not inside a subgroup)
   // Respects active search and tag filters
@@ -963,6 +970,10 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   // No longer deduplicate pinned/recent hosts from the main list,
   // so hosts always appear in their groups regardless of pinned/recent status.
   const pinnedRecentIds = useMemo(() => new Set<string>(), []);
+  const visibleDisplayedHosts = useMemo(
+    () => displayedHosts.filter((h) => selectedGroupPath || !pinnedRecentIds.has(h.id)),
+    [displayedHosts, selectedGroupPath, pinnedRecentIds],
+  );
 
   // For tree view: apply search, tag filter, and sorting, but not group filtering
   const treeViewHosts = useMemo(() => {
@@ -1126,6 +1137,26 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- findGroupNode is derived from buildGroupTree
   }, [buildGroupTree, selectedGroupPath, customGroups]);
+  const shouldHideEmptyRootHostsSection = useMemo(() => {
+    if (selectedGroupPath || viewMode === "tree") return false;
+    if (search.trim() || selectedTags.length > 0) return false;
+    if (visibleDisplayedHosts.length > 0) return false;
+    return (
+      displayedGroups.length > 0 ||
+      pinnedHosts.length > 0 ||
+      (showRecentHosts && recentHosts.length > 0)
+    );
+  }, [
+    selectedGroupPath,
+    viewMode,
+    search,
+    selectedTags.length,
+    visibleDisplayedHosts.length,
+    displayedGroups.length,
+    pinnedHosts.length,
+    showRecentHosts,
+    recentHosts.length,
+  ]);
 
   // Known Hosts callbacks - use refs to keep stable references
   // Store latest values in refs so callbacks don't need to depend on them
@@ -1443,6 +1474,15 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   }, [managedSources]);
 
   const isHostsSectionActive = currentSection === "hosts";
+  const hasHostsSidePanel =
+    isHostsSectionActive &&
+    ((isGroupPanelOpen && !!editingGroupPath) || isHostPanelOpen);
+  const splitViewGridStyle = hasHostsSidePanel
+    ? {
+      gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 220px), 280px))",
+      justifyContent: "start" as const,
+    }
+    : undefined;
 
   const isSameDropTarget = useCallback((a: DropTarget | null, b: DropTarget | null) => {
     if (!a || !b) return a === b;
@@ -1545,13 +1585,16 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
 
   // Component no longer handles visibility - that's done by VaultViewWrapper
   return (
-    <div ref={rootRef} className="absolute inset-0 min-h-0 flex">
+    <div ref={rootRef} className="absolute inset-0 min-h-0 flex" data-section="vault-view">
       {/* Sidebar */}
       <TooltipProvider delayDuration={100}>
-        <div className={cn(
-          "bg-secondary/80 border-r border-border/60 flex flex-col transition-all duration-200",
-          sidebarCollapsed ? "w-14" : "w-52"
-        )}>
+        <div
+          className={cn(
+            "bg-secondary/80 border-r border-border/60 flex flex-col transition-all duration-200",
+            sidebarCollapsed ? "w-14" : "w-52"
+          )}
+          data-section="vault-sidebar"
+        >
           <div className={cn(
             "py-4 flex items-center",
             sidebarCollapsed ? "px-2 justify-center" : "px-4"
@@ -1714,12 +1757,16 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
       </TooltipProvider>
 
       {/* Main Area */}
-      <div className="flex-1 flex flex-col min-h-0 relative">
+      <div
+        className="flex-1 min-w-0 flex flex-col min-h-0 relative"
+        data-section="vault-main"
+      >
         <header
           className={cn(
             "border-b border-border/50 bg-secondary/80 backdrop-blur app-drag",
             !isHostsSectionActive && "hidden",
           )}
+          data-section="vault-hosts-header"
         >
           <div className="h-14 px-4 py-2 flex items-center gap-3">
             <div className="relative flex-1 app-no-drag">
@@ -1823,14 +1870,25 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
                 <CheckSquare size={16} />
               </Button>
             </div>
-            {/* New Host split button */}
-            <div className="flex items-center app-no-drag">
+            {/* New Host split button — collapses with an animation when the
+                host details / new-host aside panel is open, since the button
+                would be a no-op in that state. */}
+            <div
+              className={cn(
+                "flex items-center app-no-drag overflow-hidden transition-[max-width,opacity,margin] duration-200 ease-in-out",
+                isHostPanelOpen
+                  ? "max-w-0 opacity-0 -ml-2 pointer-events-none"
+                  : "max-w-[260px] opacity-100",
+              )}
+              aria-hidden={isHostPanelOpen}
+            >
               <Dropdown>
                 <div className="flex items-center rounded-md bg-primary text-primary-foreground">
                   <Button
                     size="sm"
                     className="h-10 px-3 rounded-r-none bg-transparent hover:bg-white/10 shadow-none app-no-drag"
                     onClick={handleNewHost}
+                    tabIndex={isHostPanelOpen ? -1 : 0}
                   >
                     <Plus size={14} className="mr-2" /> {t("vault.hosts.newHost")}
                   </Button>
@@ -1838,6 +1896,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
                     <Button
                       size="sm"
                       className="h-10 px-2 rounded-l-none bg-transparent hover:bg-white/10 border-l border-primary-foreground/20 shadow-none app-no-drag"
+                      tabIndex={isHostPanelOpen ? -1 : 0}
                     >
                       <ChevronDown size={14} />
                     </Button>
@@ -1874,22 +1933,37 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
                 </DropdownContent>
               </Dropdown>
             </div>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="h-10 px-3 app-no-drag bg-foreground/5 text-foreground hover:bg-foreground/10 border-border/40"
-              onClick={onCreateLocalTerminal}
+            {/* Terminal + Serial — collapse together with an animation when
+                the host details / new-host aside panel is open, freeing
+                horizontal space for the panel. */}
+            <div
+              className={cn(
+                "flex items-center gap-3 overflow-hidden transition-[max-width,opacity,margin] duration-200 ease-in-out",
+                isHostPanelOpen
+                  ? "max-w-0 opacity-0 -ml-3 pointer-events-none"
+                  : "max-w-[320px] opacity-100",
+              )}
+              aria-hidden={isHostPanelOpen}
             >
-              <TerminalSquare size={14} className="mr-2" /> {t("common.terminal")}
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="h-10 px-3 app-no-drag bg-foreground/5 text-foreground hover:bg-foreground/10 border-border/40"
-              onClick={() => setIsSerialModalOpen(true)}
-            >
-              <Usb size={14} className="mr-2" /> {t("serial.button")}
-            </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-10 px-3 app-no-drag bg-foreground/5 text-foreground hover:bg-foreground/10 border-border/40"
+                onClick={onCreateLocalTerminal}
+                tabIndex={isHostPanelOpen ? -1 : 0}
+              >
+                <TerminalSquare size={14} className="mr-2" /> {t("common.terminal")}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-10 px-3 app-no-drag bg-foreground/5 text-foreground hover:bg-foreground/10 border-border/40"
+                onClick={() => setIsSerialModalOpen(true)}
+                tabIndex={isHostPanelOpen ? -1 : 0}
+              >
+                <Usb size={14} className="mr-2" /> {t("serial.button")}
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -1899,6 +1973,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
             "flex-1 overflow-auto px-4 py-4 space-y-6",
             !isHostsSectionActive && "hidden",
           )}
+          data-section="vault-host-list"
           onDragEndCapture={() => setDragOverDropTarget(null)}
         >
                 <section className="space-y-2">
@@ -1973,9 +2048,13 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
                       </h3>
                       <div className={cn(
                         viewMode === "grid"
-                          ? "grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                          ? cn(
+                            "grid gap-3",
+                            !hasHostsSidePanel && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+                          )
                           : "flex flex-col gap-0",
-                      )}>
+                      )}
+                      style={viewMode === "grid" ? splitViewGridStyle : undefined}>
                         {pinnedHosts.map((host) => {
                           const safeHost = sanitizeHost(host);
                           const effectiveDistro = getEffectiveHostDistro(safeHost);
@@ -2073,9 +2152,13 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
                       </h3>
                       <div className={cn(
                         viewMode === "grid"
-                          ? "grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                          ? cn(
+                            "grid gap-3",
+                            !hasHostsSidePanel && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+                          )
                           : "flex flex-col gap-0",
-                      )}>
+                      )}
+                      style={viewMode === "grid" ? splitViewGridStyle : undefined}>
                         {recentHosts.map((host) => {
                           const safeHost = sanitizeHost(host);
                           const effectiveDistro = getEffectiveHostDistro(safeHost);
@@ -2174,9 +2257,13 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
                       className={cn(
                         displayedGroups.length === 0 ? "hidden" : "",
                         viewMode === "grid"
-                          ? "grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                          ? cn(
+                            "grid gap-3",
+                            !hasHostsSidePanel && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+                          )
                           : "flex flex-col gap-0",
                       )}
+                      style={viewMode === "grid" ? splitViewGridStyle : undefined}
                       onDragOver={(e) => {
                         e.preventDefault();
                       }}
@@ -2298,6 +2385,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
                   )}
                 </section>
 
+                {!shouldHideEmptyRootHostsSection && (
                 <section className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-muted-foreground">
@@ -2305,7 +2393,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
                     </h3>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span>
-                        {t("vault.hosts.header.entries", { count: viewMode === "tree" ? treeViewHosts.length : displayedHosts.length })}
+                        {t("vault.hosts.header.entries", { count: viewMode === "tree" ? treeViewHosts.length : visibleDisplayedHosts.length })}
                       </span>
                       <div className="bg-secondary/80 border border-border/70 rounded-md px-2 py-1 text-[11px]">
                         {t("vault.hosts.header.live", { count: sessions.length })}
@@ -2414,9 +2502,13 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
                             <div
                               className={cn(
                                 viewMode === "grid"
-                                  ? "grid gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                                  ? cn(
+                                    "grid gap-3",
+                                    !hasHostsSidePanel && "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+                                  )
                                   : "flex flex-col gap-0",
                               )}
+                              style={viewMode === "grid" ? splitViewGridStyle : undefined}
                             >
                               {group.hosts.filter((h) => selectedGroupPath || !pinnedRecentIds.has(h.id)).map((host) => {
                                 const safeHost = sanitizeHost(host);
@@ -2555,11 +2647,15 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
                     <div
                       className={cn(
                         viewMode === "grid"
-                          ? "grid gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                          ? cn(
+                            "grid gap-3",
+                            !hasHostsSidePanel && "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+                          )
                           : "flex flex-col gap-0",
                       )}
+                      style={viewMode === "grid" ? splitViewGridStyle : undefined}
                     >
-                      {displayedHosts.filter((h) => selectedGroupPath || !pinnedRecentIds.has(h.id)).map((host) => {
+                      {visibleDisplayedHosts.map((host) => {
                           const safeHost = sanitizeHost(host);
                           const effectiveDistro = getEffectiveHostDistro(safeHost);
                           const distroBadge = {
@@ -2691,6 +2787,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
                     </div>
                   )}
                 </section>
+                )}
         </div>
 
         {currentSection === "snippets" && (
@@ -2817,12 +2914,14 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
           allHosts={hosts}
           groups={allGroupPaths}
           terminalThemeId={terminalThemeId}
+          groupConfigs={groupConfigs}
           terminalFontSize={terminalFontSize}
           onSave={handleSaveGroupConfig}
           onCancel={() => {
             setIsGroupPanelOpen(false);
             setEditingGroupPath(null);
           }}
+          layout="inline"
         />
       )}
 
@@ -2840,6 +2939,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
           terminalThemeId={terminalThemeId}
           terminalFontSize={terminalFontSize}
           groupDefaults={editingHostGroupDefaults}
+          groupConfigs={groupConfigs}
           onSave={(host) => {
             // Check if host already exists in the list (for updates vs. new/duplicate)
             const hostExists = hosts.some((h) => h.id === host.id);
@@ -2862,6 +2962,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
               Array.from(new Set([...customGroups, groupPath])),
             );
           }}
+          layout="inline"
         />
       )}
 
@@ -2882,6 +2983,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
             setIsHostPanelOpen(false);
             setEditingHost(null);
           }}
+          layout="inline"
         />
       )}
 

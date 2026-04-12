@@ -24,14 +24,16 @@ import { applySyncPayload } from './application/syncPayload';
 import { getCredentialProtectionAvailability } from './infrastructure/services/credentialProtection';
 import { netcattyBridge } from './infrastructure/services/netcattyBridge';
 import { localStorageAdapter } from './infrastructure/persistence/localStorageAdapter';
+import { AlertTriangle, Download, Trash2 } from 'lucide-react';
 import { STORAGE_KEY_DEBUG_HOTKEYS } from './infrastructure/config/storageKeys';
 import { TopTabs } from './components/TopTabs';
 import { Button } from './components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './components/ui/dialog';
 import { Input } from './components/ui/input';
 import { Label } from './components/ui/label';
 import { ToastProvider, toast } from './components/ui/toast';
 import { VaultView, VaultSection } from './components/VaultView';
+import { QuickAddSnippetDialog } from './components/QuickAddSnippetDialog';
 import { KeyboardInteractiveModal, KeyboardInteractiveRequest } from './components/KeyboardInteractiveModal';
 import { PassphraseModal, PassphraseRequest } from './components/PassphraseModal';
 import { cn } from './lib/utils';
@@ -177,10 +179,12 @@ function App({ settings }: { settings: SettingsState }) {
   const [passphraseQueue, setPassphraseQueue] = useState<PassphraseRequest[]>([]);
 
   const {
+    theme,
     setTheme,
     resolvedTheme,
     terminalThemeId,
     setTerminalThemeId,
+    followAppTerminalTheme,
     currentTerminalTheme,
     terminalFontFamilyId,
     setTerminalFontFamilyId,
@@ -303,6 +307,12 @@ function App({ settings }: { settings: SettingsState }) {
   const activeTabId = useActiveTabId();
   const customThemes = useCustomThemes();
 
+  useEffect(() => {
+    if (!settings.showSftpTab && activeTabId === 'sftp') {
+      setActiveTabId('vault');
+    }
+  }, [settings.showSftpTab, activeTabId, setActiveTabId]);
+
   // Resolve the effective TerminalTheme for the currently focused terminal tab
   const hostById = useMemo(
     () => new Map(hosts.map((host) => [host.id, host])),
@@ -326,6 +336,11 @@ function App({ settings }: { settings: SettingsState }) {
     if (activeTabId === 'vault' || activeTabId === 'sftp') return null;
 
     const resolveTheme = (s: TerminalSession): TerminalTheme => {
+      // When "Follow Application Theme" is on, the UI-matched terminal
+      // theme overrides everything — including per-host theme overrides.
+      // This ensures all terminals match the app chrome regardless of
+      // individual host settings.
+      if (followAppTerminalTheme) return currentTerminalTheme;
       const host = hostById.get(s.hostId) ?? null;
       const themeId = resolveHostTerminalThemeId(host, currentTerminalTheme.id);
       return themeById.get(themeId) || currentTerminalTheme;
@@ -358,7 +373,7 @@ function App({ settings }: { settings: SettingsState }) {
     const session = sessionById.get(activeTabId);
     if (!session) return null;
     return resolveTheme(session);
-  }, [activeTabId, currentTerminalTheme, hostById, sessionById, themeById, workspaceById]);
+  }, [activeTabId, currentTerminalTheme, followAppTerminalTheme, hostById, sessionById, themeById, workspaceById]);
 
   useImmersiveMode({
     activeTabId,
@@ -381,7 +396,7 @@ function App({ settings }: { settings: SettingsState }) {
   );
 
   // Auto-sync hook for cloud sync
-  const { syncNow: handleSyncNow } = useAutoSync({
+  const { syncNow: handleSyncNow, emptyVaultConflict, resolveEmptyVaultConflict } = useAutoSync({
     hosts,
     keys,
     identities,
@@ -884,13 +899,18 @@ function App({ settings }: { settings: SettingsState }) {
 
   // Shared hotkey action handler - used by both global handler and terminal callback
   const executeHotkeyAction = useCallback((action: string, e: KeyboardEvent) => {
+    // Build complete tab list: vault + (sftp when visible) + sessions/workspaces.
+    // Hiding the SFTP tab must also remove it from keyboard cycling so nextTab
+    // doesn't land on a hidden tab (which would get redirected back) and so
+    // number shortcuts don't shift.
+    const allTabs = settings.showSftpTab
+      ? ['vault', 'sftp', ...orderedTabs]
+      : ['vault', ...orderedTabs];
     switch (action) {
       case 'switchToTab': {
         // Get the number key pressed (1-9)
         const num = parseInt(e.key, 10);
         if (num >= 1 && num <= 9) {
-          // Build complete tab list: vault + sftp + sessions/workspaces
-          const allTabs = ['vault', 'sftp', ...orderedTabs];
           if (num <= allTabs.length) {
             setActiveTabId(allTabs[num - 1]);
           }
@@ -898,8 +918,6 @@ function App({ settings }: { settings: SettingsState }) {
         break;
       }
       case 'nextTab': {
-        // Build complete tab list: vault + sftp + sessions/workspaces
-        const allTabs = ['vault', 'sftp', ...orderedTabs];
         const currentId = activeTabStore.getActiveTabId();
         const currentIdx = allTabs.indexOf(currentId);
         if (currentIdx !== -1 && allTabs.length > 0) {
@@ -911,8 +929,6 @@ function App({ settings }: { settings: SettingsState }) {
         break;
       }
       case 'prevTab': {
-        // Build complete tab list: vault + sftp + sessions/workspaces
-        const allTabs = ['vault', 'sftp', ...orderedTabs];
         const currentId = activeTabStore.getActiveTabId();
         const currentIdx = allTabs.indexOf(currentId);
         if (currentIdx !== -1 && allTabs.length > 0) {
@@ -959,7 +975,9 @@ function App({ settings }: { settings: SettingsState }) {
         setActiveTabId('vault');
         break;
       case 'openSftp':
-        setActiveTabId('sftp');
+        if (settings.showSftpTab) {
+          setActiveTabId('sftp');
+        }
         break;
       case 'quickSwitch':
       case 'commandPalette':
@@ -1047,7 +1065,7 @@ function App({ settings }: { settings: SettingsState }) {
         break;
       }
     }
-  }, [orderedTabs, sessions, workspaces, setActiveTabId, closeSession, closeWorkspace, createLocalTerminalWithCurrentShell, splitSessionWithCurrentShell, moveFocusInWorkspace, toggleBroadcast]);
+  }, [orderedTabs, sessions, workspaces, setActiveTabId, closeSession, closeWorkspace, createLocalTerminalWithCurrentShell, splitSessionWithCurrentShell, moveFocusInWorkspace, toggleBroadcast, settings.showSftpTab]);
 
   // Callback for terminal to invoke app-level hotkey actions
   const handleHotkeyAction = useCallback((action: string, e: KeyboardEvent) => {
@@ -1301,10 +1319,24 @@ function App({ settings }: { settings: SettingsState }) {
   }, [protocolSelectHost, handleConnectToHost]);
 
   const handleToggleTheme = useCallback(() => {
-    // Toggle based on the actual rendered theme so clicking always produces a visible change,
-    // even when the stored preference is 'system'.
+    if (theme === 'system') {
+      toast.info(
+        t('topTabs.toggleTheme.systemExitMessage'),
+        {
+          title: t('topTabs.toggleTheme.systemExitTitle'),
+          actionLabel: t('topTabs.toggleTheme.openSettings'),
+          onClick: () => {
+            void (async () => {
+              const opened = await openSettingsWindow();
+              if (!opened) toast.error(t('toast.settingsUnavailable'), t('common.settings'));
+            })();
+          },
+        }
+      );
+      return;
+    }
     setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
-  }, [resolvedTheme, setTheme]);
+  }, [openSettingsWindow, resolvedTheme, setTheme, t, theme]);
 
   const handleOpenQuickSwitcher = useCallback(() => {
     setIsQuickSwitcherOpen(true);
@@ -1378,6 +1410,7 @@ function App({ settings }: { settings: SettingsState }) {
     <div className={cn("flex flex-col h-screen text-foreground font-sans netcatty-shell", activeTerminalTheme && "immersive-transition")} onContextMenu={handleRootContextMenu}>
       <TopTabs
         theme={resolvedTheme}
+        followAppTerminalTheme={followAppTerminalTheme}
         hosts={hosts}
         sessions={sessions}
         orphanSessions={orphanSessions}
@@ -1400,6 +1433,7 @@ function App({ settings }: { settings: SettingsState }) {
         onStartSessionDrag={setDraggingSessionId}
         onEndSessionDrag={handleEndSessionDrag}
         onReorderTabs={reorderTabs}
+        showSftpTab={settings.showSftpTab}
       />
 
       <div className="flex-1 relative min-h-0">
@@ -1445,6 +1479,8 @@ function App({ settings }: { settings: SettingsState }) {
             onClearUnsavedConnectionLogs={clearUnsavedConnectionLogs}
             onRunSnippet={runSnippet}
             onOpenLogView={openLogView}
+            showRecentHosts={settings.showRecentHosts}
+            showOnlyUngroupedHostsInRoot={settings.showOnlyUngroupedHostsInRoot}
             navigateToSection={navigateToSection}
             onNavigateToSectionHandled={() => setNavigateToSection(null)}
           />
@@ -1479,6 +1515,7 @@ function App({ settings }: { settings: SettingsState }) {
           knownHosts={knownHosts}
           draggingSessionId={draggingSessionId}
           terminalTheme={currentTerminalTheme}
+          followAppTerminalTheme={followAppTerminalTheme}
           terminalSettings={terminalSettings}
           terminalFontFamilyId={terminalFontFamilyId}
           fontSize={terminalFontSize}
@@ -1538,6 +1575,17 @@ function App({ settings }: { settings: SettingsState }) {
         })}
       </div>
 
+      {/* Global "quick add snippet" dialog, triggered by the
+          netcatty:snippets:add window event (from ScriptsSidePanel "+"). */}
+      <QuickAddSnippetDialog
+        snippets={snippets}
+        packages={snippetPackages}
+        onCreateSnippet={(snippet) => updateSnippets([...snippets, snippet])}
+        onCreatePackage={(pkg) =>
+          updateSnippetPackages(Array.from(new Set([...snippetPackages, pkg])))
+        }
+      />
+
       {isQuickSwitcherOpen && (
         <Suspense fallback={null}>
           <LazyQuickSwitcher
@@ -1546,6 +1594,7 @@ function App({ settings }: { settings: SettingsState }) {
             results={quickResults}
             sessions={sessions}
             workspaces={workspaces}
+            showSftpTab={settings.showSftpTab}
             onQueryChange={setQuickSearch}
             onSelect={handleHostConnectWithProtocolCheck}
             onSelectTab={(tabId) => {
@@ -1667,6 +1716,59 @@ function App({ settings }: { settings: SettingsState }) {
         onCancel={handlePassphraseCancel}
         onSkip={handlePassphraseSkip}
       />
+
+      {/* Empty vault vs cloud data confirmation dialog (#679).
+          This dialog intentionally cannot be dismissed — the user MUST
+          choose "Restore" or "Keep Empty" before the sync flow can
+          proceed. hideCloseButton removes the X button, onOpenChange
+          is a no-op so ESC also does nothing, and onInteractOutside
+          prevents click-away. */}
+      <Dialog open={!!emptyVaultConflict} onOpenChange={() => { /* intentionally non-dismissable */ }}>
+        <DialogContent className="max-w-md" hideCloseButton onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              {t('sync.autoSync.emptyVaultConflict.title')}
+            </DialogTitle>
+            <DialogDescription>
+              {t('sync.autoSync.emptyVaultConflict.description')}
+            </DialogDescription>
+          </DialogHeader>
+          {emptyVaultConflict && (
+            <div className="bg-muted/30 rounded-lg p-3 text-sm">
+              <div className="font-medium text-muted-foreground mb-1">{t('sync.autoSync.emptyVaultConflict.cloudLabel')}</div>
+              <div>{t('sync.autoSync.emptyVaultConflict.cloudSummary', {
+                hosts: emptyVaultConflict.hostCount,
+                keys: emptyVaultConflict.keyCount,
+                snippets: emptyVaultConflict.snippetCount,
+              })}</div>
+            </div>
+          )}
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              onClick={() => resolveEmptyVaultConflict('restore')}
+              className="w-full justify-start gap-2"
+            >
+              <Download className="w-4 h-4" />
+              <span>
+                {t('sync.autoSync.emptyVaultConflict.restore')}
+                <span className="text-xs opacity-70 ml-1">— {t('sync.autoSync.emptyVaultConflict.restoreDesc')}</span>
+              </span>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => resolveEmptyVaultConflict('keep-empty')}
+              className="w-full justify-start gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>
+                {t('sync.autoSync.emptyVaultConflict.keepEmpty')}
+                <span className="text-xs opacity-70 ml-1">— {t('sync.autoSync.emptyVaultConflict.keepEmptyDesc')}</span>
+              </span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -12,6 +12,7 @@ export const STORAGE_KEY_UI_THEME_DARK = 'netcatty_ui_theme_dark_v1';
 export const STORAGE_KEY_UI_FONT_FAMILY = 'netcatty_ui_font_family_v1';
 export const STORAGE_KEY_SYNC = 'netcatty_sync_v1';
 export const STORAGE_KEY_TERM_THEME = 'netcatty_term_theme_v1';
+export const STORAGE_KEY_TERM_FOLLOW_APP_THEME = 'netcatty_term_follow_app_theme_v1';
 export const STORAGE_KEY_TERM_FONT_FAMILY = 'netcatty_term_font_family_v1';
 export const STORAGE_KEY_TERM_FONT_SIZE = 'netcatty_term_font_size_v1';
 export const STORAGE_KEY_TERM_SETTINGS = 'netcatty_term_settings_v1';
@@ -88,6 +89,7 @@ export const STORAGE_KEY_AI_PROVIDERS = 'netcatty_ai_providers_v1';
 export const STORAGE_KEY_AI_ACTIVE_PROVIDER = 'netcatty_ai_active_provider_v1';
 export const STORAGE_KEY_AI_ACTIVE_MODEL = 'netcatty_ai_active_model_v1';
 export const STORAGE_KEY_AI_PERMISSION_MODE = 'netcatty_ai_permission_mode_v1';
+export const STORAGE_KEY_AI_TOOL_INTEGRATION_MODE = 'netcatty_ai_tool_integration_mode_v1';
 export const STORAGE_KEY_AI_HOST_PERMISSIONS = 'netcatty_ai_host_permissions_v1';
 export const STORAGE_KEY_AI_EXTERNAL_AGENTS = 'netcatty_ai_external_agents_v1';
 export const STORAGE_KEY_AI_DEFAULT_AGENT = 'netcatty_ai_default_agent_v1';
@@ -110,6 +112,10 @@ export const STORAGE_KEY_IMMERSIVE_MODE = 'netcatty_immersive_mode_v1';
 
 // Vault: Show Recently Connected hosts section
 export const STORAGE_KEY_SHOW_RECENT_HOSTS = 'netcatty_show_recent_hosts_v1';
+export const STORAGE_KEY_SHOW_ONLY_UNGROUPED_HOSTS_IN_ROOT = 'netcatty_show_only_ungrouped_hosts_in_root_v1';
+
+// Top tabs: Show standalone SFTP view tab
+export const STORAGE_KEY_SHOW_SFTP_TAB = 'netcatty_show_sftp_tab_v1';
 
 // Group Configurations (default settings inherited by hosts)
 export const STORAGE_KEY_GROUP_CONFIGS = 'netcatty_group_configs_v1';

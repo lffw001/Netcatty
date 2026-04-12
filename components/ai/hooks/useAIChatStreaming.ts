@@ -14,6 +14,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { streamText, stepCountIs, type ModelMessage } from 'ai';
 import type {
   AIPermissionMode,
+  AIToolIntegrationMode,
   AISession,
   ChatMessage,
   ChatMessageAttachment,
@@ -29,6 +30,7 @@ import { createCattyTools } from '../../../infrastructure/ai/sdk/tools';
 import type { NetcattyBridge, ExecutorContext } from '../../../infrastructure/ai/cattyAgent/executor';
 import { runExternalAgentTurn } from '../../../infrastructure/ai/externalAgentAdapter';
 import { runAcpAgentTurn } from '../../../infrastructure/ai/acpAgentAdapter';
+import { findManagedAgentProvider, matchesManagedAgentConfig } from '../../../infrastructure/ai/managedAgents';
 import { classifyError } from '../../../infrastructure/ai/errorClassifier';
 
 // -------------------------------------------------------------------
@@ -137,6 +139,10 @@ export interface TerminalSessionInfo {
   connected: boolean;
 }
 
+export interface DefaultTargetSessionHint extends TerminalSessionInfo {
+  source: 'scope-target' | 'only-connected-in-scope';
+}
+
 /** Typed accessor for the netcatty bridge on the window object. */
 export function getNetcattyBridge(): PanelBridge | undefined {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -242,8 +248,10 @@ export interface SendToExternalContext {
   updateExternalSessionId?: (sessionId: string, externalSessionId: string | undefined) => void;
   historyMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
   terminalSessions: TerminalSessionInfo[];
+  defaultTargetSession?: DefaultTargetSessionHint;
   providers: ProviderConfig[];
   selectedAgentModel?: string;
+  toolIntegrationMode: AIToolIntegrationMode;
 }
 
 // -------------------------------------------------------------------
@@ -546,8 +554,18 @@ export function useAIChatStreaming({
 
       // Pass only the provider ID — the main process resolves and decrypts the API key itself,
       // avoiding plaintext key transit across the IPC boundary.
-      const openaiProvider = context.providers.find(p => p.providerId === 'openai' && p.enabled && p.apiKey);
-      const agentProviderId = openaiProvider?.id;
+      // Resolve the correct provider based on agent type:
+      // - Claude agent → anthropic provider (prefer over generic custom)
+      // - Codex agent  → openai provider (fallback to openai-compatible custom)
+      const agentProviderId = (() => {
+        if (matchesManagedAgentConfig(agentConfig, 'claude')) {
+          return findManagedAgentProvider(context.providers, 'claude')?.id;
+        }
+        if (matchesManagedAgentConfig(agentConfig, 'codex')) {
+          return findManagedAgentProvider(context.providers, 'codex')?.id;
+        }
+        return undefined;
+      })();
 
       // Mutable flag: set after tool-result, cleared when new assistant msg is created
       let needsNewAssistantMsg = false;
@@ -635,6 +653,8 @@ export function useAIChatStreaming({
         context.existingSessionId,
         context.historyMessages,
         attachedImages.length > 0 ? attachedImages : undefined,
+        context.toolIntegrationMode,
+        context.defaultTargetSession,
       );
     } else {
       // Fallback: spawn as raw process

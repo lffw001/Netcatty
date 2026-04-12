@@ -12,11 +12,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type {
   AIPermissionMode,
   AIProviderId,
+  AIToolIntegrationMode,
   ExternalAgentConfig,
   ProviderConfig,
   WebSearchConfig,
 } from "../../../infrastructure/ai/types";
 import {
+  findManagedAgentProvider,
   getManagedAgentStoredPath,
   matchesManagedAgentConfig,
   type ManagedAgentKey,
@@ -61,6 +63,8 @@ interface SettingsAITabProps {
   setActiveModelId: (id: string) => void;
   globalPermissionMode: AIPermissionMode;
   setGlobalPermissionMode: (mode: AIPermissionMode) => void;
+  toolIntegrationMode: AIToolIntegrationMode;
+  setToolIntegrationMode: (mode: AIToolIntegrationMode) => void;
   externalAgents: ExternalAgentConfig[];
   setExternalAgents: (value: ExternalAgentConfig[] | ((prev: ExternalAgentConfig[]) => ExternalAgentConfig[])) => void;
   defaultAgentId: string;
@@ -138,6 +142,8 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
   setActiveModelId,
   globalPermissionMode,
   setGlobalPermissionMode,
+  toolIntegrationMode,
+  setToolIntegrationMode,
   externalAgents,
   setExternalAgents,
   defaultAgentId,
@@ -299,18 +305,16 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
       .map((a) => ({ value: a.id, label: a.name, icon: <AgentIconBadge agent={a} size="xs" variant="plain" /> })),
   ], [externalAgents, t]);
 
-  const hasOpenAiProviderKey = providers.some(
-    (provider) => provider.providerId === "openai" && provider.enabled && !!provider.apiKey,
-  );
+  const hasCodexCompatibleProvider = Boolean(findManagedAgentProvider(providers, "codex"));
 
-  const refreshCodexIntegration = useCallback(async () => {
+  const refreshCodexIntegration = useCallback(async (opts?: { refreshShellEnv?: boolean }) => {
     const bridge = getBridge();
     if (!bridge?.aiCodexGetIntegration) return;
 
     setIsCodexLoading(true);
     setCodexError(null);
     try {
-      const integration = await bridge.aiCodexGetIntegration();
+      const integration = await bridge.aiCodexGetIntegration(opts);
       setCodexIntegration(integration);
     } catch (err) {
       setCodexError(normalizeCodexBridgeError(err));
@@ -519,9 +523,9 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
               integration={codexIntegration}
               loginSession={codexLoginSession}
               isLoading={isCodexLoading}
-              hasOpenAiProviderKey={hasOpenAiProviderKey}
+              hasCompatibleProvider={hasCodexCompatibleProvider}
               error={codexError}
-              onRefresh={() => void refreshCodexIntegration()}
+              onRefresh={() => void refreshCodexIntegration({ refreshShellEnv: true })}
               onConnect={() => void handleStartCodexLogin()}
               onCancel={() => void handleCancelCodexLogin()}
               onOpenUrl={handleOpenCodexLoginUrl}
@@ -584,6 +588,30 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
               </div>
             </div>
           )}
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Bot size={18} className="text-muted-foreground" />
+              <h3 className="text-base font-medium">{t('ai.toolAccess.title')}</h3>
+            </div>
+
+            <div className="bg-muted/30 rounded-lg p-4">
+              <SettingRow
+                label={t('ai.toolAccess.mode')}
+                description={t('ai.toolAccess.description')}
+              >
+                <Select
+                  value={toolIntegrationMode}
+                  options={[
+                    { value: 'mcp', label: t('ai.toolAccess.mode.mcp') },
+                    { value: 'skills', label: t('ai.toolAccess.mode.skills') },
+                  ]}
+                  onChange={(value) => setToolIntegrationMode(value as AIToolIntegrationMode)}
+                  className="w-48"
+                />
+              </SettingRow>
+            </div>
+          </div>
 
           {/* -- Web Search Section -- */}
           <WebSearchSettings
